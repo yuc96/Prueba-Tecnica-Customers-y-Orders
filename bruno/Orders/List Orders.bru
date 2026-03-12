@@ -1,0 +1,10 @@
+meta {
+  name: List Orders
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{base_orders}}/orders?status=&from=&to=&cursor=&limit=20
+  body: none
+}

@@ -1,0 +1,23 @@
+meta {
+  name: Create and Confirm Order
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_lambda}}/orchestrator/create-and-confirm-order
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  "customer_id": 1,
+  "items": [
+    { "product_id": 2, "qty": 3 }
+  ],
+  "idempotency_key": "abc-123",
+  "correlation_id": "req-789"
+}

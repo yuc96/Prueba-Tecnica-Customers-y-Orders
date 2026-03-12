@@ -1,0 +1,233 @@
+{
+  "info": {
+    "name": "B2B Orders System",
+    "description": "Customers API, Orders API y Lambda Orquestador. Variables de colección: base_customers (http://localhost:3001), base_orders (http://localhost:3002), base_lambda (http://localhost:3000), service_token (shared-internal-token).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_customers", "value": "http://localhost:3001" },
+    { "key": "base_orders", "value": "http://localhost:3002" },
+    { "key": "base_lambda", "value": "http://localhost:3000" },
+    { "key": "service_token", "value": "shared-internal-token" },
+    { "key": "customer_id", "value": "1" },
+    { "key": "order_id", "value": "1" },
+    { "key": "product_id", "value": "2" }
+  ],
+  "item": [
+    {
+      "name": "Customers API",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_customers}}/health"
+          }
+        },
+        {
+          "name": "Create Customer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ACME Corp\",\n  \"email\": \"ops@acme.com\",\n  \"phone\": \"+1-555-0100\"\n}"
+            },
+            "url": "{{base_customers}}/customers"
+          }
+        },
+        {
+          "name": "Get Customer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_customers}}/customers/{{customer_id}}"
+          }
+        },
+        {
+          "name": "List Customers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_customers}}/customers?search=&limit=20",
+              "host": ["{{base_customers}}"],
+              "path": ["customers"],
+              "query": [
+                { "key": "search", "value": "" },
+                { "key": "cursor", "value": "" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Customer",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ACME Corp Updated\",\n  \"phone\": \"+1-555-0199\"\n}"
+            },
+            "url": "{{base_customers}}/customers/{{customer_id}}"
+          }
+        },
+        {
+          "name": "Delete Customer (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_customers}}/customers/{{customer_id}}"
+          }
+        },
+        {
+          "name": "Get Customer (internal)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{service_token}}" }
+            ],
+            "url": "{{base_customers}}/internal/customers/{{customer_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders API",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_orders}}/health"
+          }
+        },
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"SKU-001\",\n  \"name\": \"Widget A\",\n  \"price_cents\": 9999,\n  \"stock\": 100\n}"
+            },
+            "url": "{{base_orders}}/products"
+          }
+        },
+        {
+          "name": "Get Product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_orders}}/products/{{product_id}}"
+          }
+        },
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_orders}}/products?limit=20",
+              "host": ["{{base_orders}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "search", "value": "" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Product (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price_cents\": 10999,\n  \"stock\": 80\n}"
+            },
+            "url": "{{base_orders}}/products/{{product_id}}"
+          }
+        },
+        {
+          "name": "Create Order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": 1,\n  \"items\": [\n    { \"product_id\": 2, \"qty\": 3 }\n  ]\n}"
+            },
+            "url": "{{base_orders}}/orders"
+          }
+        },
+        {
+          "name": "Get Order",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_orders}}/orders/{{order_id}}"
+          }
+        },
+        {
+          "name": "List Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_orders}}/orders?limit=20",
+              "host": ["{{base_orders}}"],
+              "path": ["orders"],
+              "query": [
+                { "key": "status", "value": "" },
+                { "key": "from", "value": "" },
+                { "key": "to", "value": "" },
+                { "key": "cursor", "value": "" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Confirm Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Idempotency-Key", "value": "abc-123-unique-key" }
+            ],
+            "url": "{{base_orders}}/orders/{{order_id}}/confirm"
+          }
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_orders}}/orders/{{order_id}}/cancel"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lambda Orquestador",
+      "item": [
+        {
+          "name": "Create and Confirm Order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": 1,\n  \"items\": [\n    { \"product_id\": 2, \"qty\": 3 }\n  ],\n  \"idempotency_key\": \"abc-123\",\n  \"correlation_id\": \"req-789\"\n}"
+            },
+            "url": "{{base_lambda}}/orchestrator/create-and-confirm-order"
+          }
+        }
+      ]
+    }
+  ]
+}

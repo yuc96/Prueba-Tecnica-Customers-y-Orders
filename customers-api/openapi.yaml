@@ -1,0 +1,293 @@
+openapi: 3.0.3
+info:
+  title: Customers API
+  description: API de gestión de clientes para el backoffice B2B. Incluye endpoint interno protegido por SERVICE_TOKEN para uso por Orders API.
+  version: 1.0.0
+  contact:
+    name: B2B Orders System
+
+servers:
+  - url: http://localhost:3001
+    description: Local / Docker
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Comprueba que el servicio está en ejecución.
+      operationId: getHealth
+      responses:
+        "200":
+          description: Servicio operativo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: customers-api }
+
+  /customers:
+    get:
+      summary: Listar clientes
+      description: Búsqueda con paginación por cursor. Opcionalmente filtra por texto en nombre o email.
+      operationId: listCustomers
+      parameters:
+        - name: search
+          in: query
+          description: Texto para buscar en name o email
+          schema: { type: string }
+        - name: cursor
+          in: query
+          description: Cursor para la siguiente página (id del último elemento)
+          schema: { type: string }
+        - name: limit
+          in: query
+          description: Máximo de resultados (máx 100)
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Lista paginada de clientes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Customer" }
+                  nextCursor: { type: string, nullable: true }
+                  hasMore: { type: boolean }
+              example:
+                data:
+                  - id: 1
+                    name: ACME Corp
+                    email: ops@acme.com
+                    phone: "+1-555-0100"
+                    created_at: "2025-01-15T10:00:00.000Z"
+                nextCursor: "2"
+                hasMore: false
+
+    post:
+      summary: Crear cliente
+      description: Crea un nuevo cliente. El email debe ser único.
+      operationId: createCustomer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                  description: "Nombre del cliente. Requerido, no vacío, máx 255 caracteres."
+                email:
+                  type: string
+                  format: email
+                  description: "Email único. Formato de correo válido."
+                phone:
+                  type: string
+                  maxLength: 100
+                  pattern: "^\\+?[0-9][0-9\\s\\-]*$"
+                  description: "Teléfono opcional. Solo permite + (extensión) y dígitos; espacios y guiones permitidos. Máx 100 caracteres."
+            example:
+              name: ACME Corp
+              email: ops@acme.com
+              phone: "+1-555-0100"
+      responses:
+        "201":
+          description: Cliente creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "400":
+          description: "Error de validación. Códigos posibles (details[].code): invalid_email, required, invalid_type, max_length, invalid_phone."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+              examples:
+                invalid_email:
+                  summary: Email inválido
+                  value:
+                    error: "Validation error"
+                    code: "VALIDATION_ERROR"
+                    details:
+                      - path: ["email"]
+                        message: "Email inválido. Debe ser una dirección de correo válida."
+                        code: "invalid_email"
+                required_name:
+                  summary: Nombre requerido
+                  value:
+                    error: "Validation error"
+                    code: "VALIDATION_ERROR"
+                    details:
+                      - path: ["name"]
+                        message: "El nombre es requerido y no puede estar vacío."
+                        code: "required"
+                invalid_phone:
+                  summary: Teléfono con caracteres no permitidos
+                  value:
+                    error: "Validation error"
+                    code: "VALIDATION_ERROR"
+                    details:
+                      - path: ["phone"]
+                        message: "El teléfono solo puede contener el símbolo + (para extensión) y dígitos; no se permiten letras ni otros caracteres especiales."
+                        code: "invalid_phone"
+        "409":
+          description: Email ya existe
+
+  /customers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/CustomerId"
+    get:
+      summary: Obtener cliente por ID
+      operationId: getCustomer
+      responses:
+        "200":
+          description: Cliente encontrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "400":
+          description: "id inválido (no entero positivo)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string, example: "El id debe ser un número entero positivo." }
+                  code: { type: string, example: "invalid_id" }
+        "404":
+          description: Cliente no encontrado
+    put:
+      summary: Actualizar cliente
+      operationId: updateCustomer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                phone:
+                  type: string
+                  maxLength: 100
+                  pattern: "^\\+?[0-9][0-9\\s\\-]*$"
+                  description: "Solo + (extensión) y dígitos; espacios y guiones permitidos."
+      responses:
+        "200":
+          description: Cliente actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "400":
+          description: "Error de validación o id inválido."
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/ValidationError" }
+                  - type: object
+                    properties:
+                      error: { type: string }
+                      code: { type: string, example: "invalid_id" }
+        "404":
+          description: Cliente no encontrado
+        "409":
+          description: Email ya usado por otro cliente
+    delete:
+      summary: Soft delete cliente
+      description: Marca el cliente como eliminado (deleted_at). No borra el registro.
+      operationId: deleteCustomer
+      responses:
+        "400":
+          description: "id inválido (no entero positivo)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  code: { type: string, example: "invalid_id" }
+        "204":
+          description: Eliminado correctamente
+        "404":
+          description: Cliente no encontrado
+
+  /internal/customers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/CustomerId"
+    get:
+      summary: Obtener cliente (interno)
+      description: Mismo que GET /customers/:id pero requiere Authorization Bearer con SERVICE_TOKEN. Usado por Orders API.
+      operationId: getCustomerInternal
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Cliente encontrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "401":
+          description: Falta o token inválido
+        "403":
+          description: Token de servicio inválido
+        "404":
+          description: Cliente no encontrado
+
+components:
+  parameters:
+    CustomerId:
+      name: id
+      in: path
+      required: true
+      description: "ID del cliente. Debe ser un número entero positivo (no letras ni caracteres especiales)."
+      schema: { type: integer, minimum: 1 }
+
+  schemas:
+    ValidationErrorDetail:
+      type: object
+      properties:
+        path:
+          type: array
+          items: { type: string }
+          description: "Ruta del campo (ej. ['email'], ['name'])."
+        message:
+          type: string
+          description: "Mensaje de error legible."
+        code:
+          type: string
+          description: "Código del error para lógica cliente."
+          enum: [invalid_email, required, invalid_type, invalid_id, max_length, invalid_value]
+    ValidationError:
+      type: object
+      required: [error, code, details]
+      properties:
+        error: { type: string, example: "Validation error" }
+        code: { type: string, example: "VALIDATION_ERROR" }
+        details:
+          type: array
+          items: { $ref: "#/components/schemas/ValidationErrorDetail" }
+    Customer:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        name: { type: string, example: ACME Corp }
+        email: { type: string, format: email, example: ops@acme.com }
+        phone: { type: string, nullable: true, example: "+1-555-0100" }
+        created_at: { type: string, format: date-time }
+        deleted_at: { type: string, format: date-time, nullable: true, description: Presente si soft-deleted }
+      required: [id, name, email, created_at]
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Usar el valor de SERVICE_TOKEN como token

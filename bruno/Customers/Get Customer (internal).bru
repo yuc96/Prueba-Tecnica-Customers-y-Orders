@@ -1,0 +1,14 @@
+meta {
+  name: Get Customer (internal)
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{base_customers}}/internal/customers/{{customer_id}}
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{service_token}}
+}

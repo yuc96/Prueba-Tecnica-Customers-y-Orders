@@ -1,0 +1,10 @@
+meta {
+  name: Delete Customer (soft)
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{base_customers}}/customers/{{customer_id}}
+  body: none
+}

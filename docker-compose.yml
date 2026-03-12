@@ -1,0 +1,59 @@
+services:
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: b2b_orders
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  customers-api:
+    build:
+      context: .
+      dockerfile: customers-api/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
+      MYSQL_DATABASE: b2b_orders
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-shared-internal-token}
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  orders-api:
+    build:
+      context: .
+      dockerfile: orders-api/Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
+      MYSQL_DATABASE: b2b_orders
+      CUSTOMERS_API_BASE: http://customers-api:3001
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-shared-internal-token}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      customers-api:
+        condition: service_started
+
+volumes:
+  mysql_data:

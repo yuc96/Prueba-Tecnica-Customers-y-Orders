@@ -1,0 +1,17 @@
+meta {
+  name: List Customers
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{base_customers}}/customers?search=&cursor=&limit=20
+  body: none
+  auth: none
+}
+
+params:query {
+  search: 
+  cursor: 
+  limit: 20
+}

@@ -1,0 +1,16 @@
+{
+  "name": "lambda-orchestrator",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "bun run build && serverless offline --stage dev",
+    "deploy": "bun run build && serverless deploy"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "serverless": "^3.38.0",
+    "serverless-offline": "^13.3.0",
+    "typescript": "^5.6.0"
+  }
+}

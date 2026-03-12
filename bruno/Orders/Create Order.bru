@@ -1,0 +1,25 @@
+meta {
+  name: Create Order
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{base_orders}}/orders
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "customer_id": 1,
+    "items": [
+    { "product_id": 2, "qty": 3 }
+  ]
+  
+  }
+}

@@ -1,0 +1,23 @@
+meta {
+  name: Update Product (PATCH)
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{base_orders}}/products/{{product_id}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Iphone",
+    "price_cents": 10999,
+    "stock": 3
+  }
+}

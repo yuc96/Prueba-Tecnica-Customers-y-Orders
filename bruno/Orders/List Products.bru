@@ -1,0 +1,16 @@
+meta {
+  name: List Products
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{base_orders}}/products?search=&limit=20
+  body: none
+  auth: none
+}
+
+params:query {
+  search: 
+  limit: 20
+}

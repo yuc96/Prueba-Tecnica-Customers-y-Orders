@@ -1,0 +1,462 @@
+openapi: 3.0.3
+info:
+  title: Orders API
+  description: API de productos y pedidos para el backoffice B2B. Valida clientes contra Customers API, gestiona stock y confirmación idempotente.
+  version: 1.0.0
+  contact:
+    name: B2B Orders System
+
+servers:
+  - url: http://localhost:3002
+    description: Local / Docker
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Comprueba que el servicio está en ejecución.
+      operationId: getHealth
+      responses:
+        "200":
+          description: Servicio operativo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: orders-api }
+
+  /products:
+    get:
+      summary: Listar productos
+      description: Búsqueda con paginación por cursor. Opcionalmente filtra por texto en name o sku.
+      operationId: listProducts
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Lista paginada de productos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Product" }
+                  nextCursor: { type: string, nullable: true }
+                  hasMore: { type: boolean }
+
+    post:
+      summary: Crear producto
+      description: Crea un producto. El sku debe ser único.
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sku, name, price_cents]
+              properties:
+                sku:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  description: "SKU único. Requerido, máx 100 caracteres."
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                  description: "Nombre del producto. Requerido."
+                price_cents:
+                  type: integer
+                  minimum: 0
+                  description: "Precio en céntimos. Entero no negativo (no decimales, ni letras)."
+                stock:
+                  type: integer
+                  minimum: 0
+                  default: 0
+                  description: "Stock. Entero no negativo."
+            example:
+              sku: SKU-001
+              name: Widget A
+              price_cents: 9999
+              stock: 100
+      responses:
+        "201":
+          description: Producto creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400":
+          description: "Error de validación. Códigos en details (required, invalid_number, invalid_type, max_length)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+              examples:
+                invalid_number:
+                  summary: Número inválido (price_cents)
+                  value:
+                    error: "Validation error"
+                    code: "VALIDATION_ERROR"
+                    details:
+                      - path: ["price_cents"]
+                        message: "price_cents debe ser un número entero no negativo (0 o más)."
+                        code: "invalid_number"
+                required_sku:
+                  summary: SKU requerido
+                  value:
+                    error: "Validation error"
+                    code: "VALIDATION_ERROR"
+                    details:
+                      - path: ["sku"]
+                        message: "El SKU es requerido y no puede estar vacío."
+                        code: "required"
+        "409":
+          description: "Ya existe un producto con ese SKU."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Ya existe un producto con el SKU \"SKU-002\"."
+                  code:
+                    type: string
+                    example: "SKU_ALREADY_EXISTS"
+
+  /products/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: "ID del producto. Número entero positivo."
+        schema: { type: integer, minimum: 1 }
+    get:
+      summary: Obtener producto por ID
+      operationId: getProduct
+      responses:
+        "200":
+          description: Producto encontrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400":
+          description: "id inválido (no entero positivo)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  code: { type: string, example: "invalid_id" }
+        "404":
+          description: Producto no encontrado
+    patch:
+      summary: Actualizar producto
+      description: Actualiza nombre, precio y/o stock.
+      operationId: updateProduct
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                price_cents: { type: integer, minimum: 0 }
+                stock: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: Producto actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400":
+          description: "Error de validación o id inválido."
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/ValidationError" }
+                  - type: object
+                    properties:
+                      error: { type: string }
+                      code: { type: string, example: "invalid_id" }
+        "404":
+          description: Producto no encontrado
+
+  /orders:
+    get:
+      summary: Listar pedidos
+      description: Filtros por status, rango de fechas y paginación por cursor.
+      operationId: listOrders
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [CREATED, CONFIRMED, CANCELED] }
+        - name: from
+          in: query
+          description: Fecha desde (ISO 8601)
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: Fecha hasta (ISO 8601)
+          schema: { type: string, format: date-time }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Lista paginada de pedidos (sin items)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Order" }
+                  nextCursor: { type: string, nullable: true }
+                  hasMore: { type: boolean }
+
+    post:
+      summary: Crear pedido
+      description: Valida el cliente en Customers API, verifica stock, crea la orden en estado CREATED y descuenta stock en una transacción.
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customer_id, items]
+              properties:
+                customer_id:
+                  type: integer
+                  minimum: 1
+                  description: "ID del cliente. Número entero positivo (no letras ni caracteres especiales)."
+                items:
+                  type: array
+                  minItems: 1
+                  description: "Al menos un item. Cada item: product_id y qty (enteros positivos)."
+                  items:
+                    type: object
+                    required: [product_id, qty]
+                    properties:
+                      product_id:
+                        type: integer
+                        minimum: 1
+                        description: "ID del producto. Entero positivo."
+                      qty:
+                        type: integer
+                        minimum: 1
+                        description: "Cantidad. Entero positivo."
+            example:
+              customer_id: 1
+              items:
+                - product_id: 2
+                  qty: 3
+      responses:
+        "201":
+          description: Pedido creado (estado CREATED) con items
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderWithItems" }
+        "400":
+          description: "Error de validación. details[].code: invalid_number, required, min_items (customer_id, product_id, qty enteros positivos; items no vacío)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+              examples:
+                invalid_customer_id:
+                  summary: customer_id no es número entero positivo
+                  value:
+                    error: "Validation error"
+                    code: "VALIDATION_ERROR"
+                    details:
+                      - path: ["customer_id"]
+                        message: "customer_id debe ser un número entero positivo."
+                        code: "invalid_number"
+                min_items:
+                  summary: items vacío
+                  value:
+                    error: "Validation error"
+                    code: "VALIDATION_ERROR"
+                    details:
+                      - path: ["items"]
+                        message: "items debe tener al menos un elemento."
+                        code: "min_items"
+        "404":
+          description: Cliente no encontrado
+        "422":
+          description: Stock insuficiente o producto no encontrado
+
+  /orders/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      summary: Obtener pedido por ID
+      description: Incluye los items del pedido.
+      operationId: getOrder
+      responses:
+        "200":
+          description: Pedido con items
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderWithItems" }
+        "404":
+          description: Pedido no encontrado
+
+  /orders/{id}/confirm:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        description: Clave única para evitar confirmaciones duplicadas. Misma key devuelve la misma respuesta.
+        schema: { type: string }
+    post:
+      summary: Confirmar pedido
+      description: Cambia el estado a CONFIRMED. Idempotente; repetir la misma X-Idempotency-Key devuelve el mismo resultado sin volver a confirmar.
+      operationId: confirmOrder
+      responses:
+        "200":
+          description: Pedido confirmado (o respuesta cacheada por idempotencia)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderWithItems" }
+        "400":
+          description: "Falta header X-Idempotency-Key (code: missing_header) o id inválido (code: invalid_id)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  code: { type: string, enum: [missing_header, invalid_id] }
+        "422":
+          description: "Pedido no está en estado CREATED (ya cancelado o ya confirmado). Código INVALID_ORDER_STATE."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  code: { type: string, example: "INVALID_ORDER_STATE" }
+              examples:
+                already_canceled:
+                  summary: Orden ya cancelada
+                  value:
+                    error: "La orden ya fue cancelada y no se puede confirmar."
+                    code: "INVALID_ORDER_STATE"
+                already_confirmed:
+                  summary: Orden ya confirmada
+                  value:
+                    error: "La orden ya fue confirmada y no se puede volver a confirmar."
+                    code: "INVALID_ORDER_STATE"
+        "404":
+          description: Pedido no encontrado
+
+  /orders/{id}/cancel:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    post:
+      summary: Cancelar pedido
+      description: "CREATED: cancela y restaura stock. CONFIRMED: solo permite cancelar dentro de 10 minutos desde la creación."
+      operationId: cancelOrder
+      responses:
+        "200":
+          description: Pedido cancelado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderWithItems" }
+        "404":
+          description: Pedido no encontrado
+        "422":
+          description: Estado inválido o CONFIRMED fuera de ventana de 10 min
+
+components:
+  schemas:
+    ValidationErrorDetail:
+      type: object
+      properties:
+        path:
+          type: array
+          items: { type: string }
+          description: "Ruta del campo (ej. ['customer_id'], ['items', '0', 'qty'])."
+        message: { type: string }
+        code:
+          type: string
+          enum: [required, invalid_number, invalid_id, invalid_type, max_length, min_items, invalid_value, missing_header]
+    ValidationError:
+      type: object
+      required: [error, code, details]
+      properties:
+        error: { type: string, example: "Validation error" }
+        code: { type: string, example: "VALIDATION_ERROR" }
+        details:
+          type: array
+          items: { $ref: "#/components/schemas/ValidationErrorDetail" }
+    Product:
+      type: object
+      properties:
+        id: { type: integer }
+        sku: { type: string }
+        name: { type: string }
+        price_cents: { type: integer }
+        stock: { type: integer }
+        created_at: { type: string, format: date-time }
+      required: [id, sku, name, price_cents, stock, created_at]
+
+    Order:
+      type: object
+      properties:
+        id: { type: integer }
+        customer_id: { type: integer }
+        status: { type: string, enum: [CREATED, CONFIRMED, CANCELED] }
+        total_cents: { type: integer }
+        created_at: { type: string, format: date-time }
+      required: [id, customer_id, status, total_cents, created_at]
+
+    OrderItem:
+      type: object
+      properties:
+        id: { type: integer }
+        order_id: { type: integer }
+        product_id: { type: integer }
+        qty: { type: integer }
+        unit_price_cents: { type: integer }
+        subtotal_cents: { type: integer }
+      required: [id, order_id, product_id, qty, unit_price_cents, subtotal_cents]
+
+    OrderWithItems:
+      allOf:
+        - { $ref: "#/components/schemas/Order" }
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/OrderItem" }

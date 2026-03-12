@@ -1,0 +1,14 @@
+meta {
+  name: Confirm Order
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{base_orders}}/orders/{{order_id}}/confirm
+  body: none
+}
+
+headers {
+  X-Idempotency-Key: abc-123-unique-key
+}

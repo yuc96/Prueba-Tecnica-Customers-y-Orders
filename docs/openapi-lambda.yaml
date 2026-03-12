@@ -1,0 +1,98 @@
+openapi: 3.0.3
+info:
+  title: Lambda Orquestador - Create and Confirm Order
+  description: Endpoint único que valida cliente, crea el pedido y lo confirma en una sola llamada. Útil para invocación desde API Gateway (local con serverless-offline o AWS).
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:3000
+    description: serverless-offline local
+  - url: https://xxxxxxxxxx.execute-api.REGION.amazonaws.com
+    description: AWS API Gateway (reemplazar por tu URL tras deploy)
+
+paths:
+  /orchestrator/create-and-confirm-order:
+    post:
+      summary: Crear y confirmar pedido
+      description: |
+        1. Valida el cliente en Customers API (/internal/customers/:id).
+        2. Crea el pedido en Orders API (POST /orders).
+        3. Confirma el pedido en Orders API (POST /orders/:id/confirm) con X-Idempotency-Key.
+        Devuelve un JSON consolidado con cliente y pedido confirmado.
+      operationId: createAndConfirmOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customer_id, items, idempotency_key]
+              properties:
+                customer_id:
+                  type: integer
+                  description: ID del cliente en Customers API
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [product_id, qty]
+                    properties:
+                      product_id: { type: integer }
+                      qty: { type: integer, minimum: 1 }
+                idempotency_key:
+                  type: string
+                  description: Clave única para idempotencia en la confirmación
+                correlation_id:
+                  type: string
+                  description: Opcional; se devuelve en la respuesta para trazabilidad
+            example:
+              customer_id: 1
+              items:
+                - product_id: 2
+                  qty: 3
+              idempotency_key: "abc-123"
+              correlation_id: "req-789"
+      responses:
+        "201":
+          description: Pedido creado y confirmado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  correlationId: { type: string, nullable: true }
+                  data:
+                    type: object
+                    properties:
+                      customer:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          name: { type: string }
+                          email: { type: string }
+                          phone: { type: string, nullable: true }
+                      order:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          status: { type: string, example: CONFIRMED }
+                          total_cents: { type: integer }
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                product_id: { type: integer }
+                                qty: { type: integer }
+                                unit_price_cents: { type: integer }
+                                subtotal_cents: { type: integer }
+        "400":
+          description: Body inválido o faltan campos
+        "404":
+          description: Cliente no encontrado
+        "422":
+          description: Stock insuficiente u otro error de negocio
+        "500":
+          description: Error interno o APIs no disponibles
